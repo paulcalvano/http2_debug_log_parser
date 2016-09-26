@@ -1,0 +1,219 @@
+<!--
+	Description:  HTTP/2 Debug Log Parser
+	Author: Paul Calvano, Sr Web Peformance Architect @ Akamai
+	Contact:  pacalvan (at) akamai.com 
+-->
+
+<html>
+
+<head>
+
+  <script type="text/javascript" src="//code.jquery.com/jquery-1.10.1.js"></script>
+	<style>
+		.txtarea{
+    max-width:100%;
+    min-height:200px;    
+    display:block;
+    width:100%;
+}
+
+.mydiv{
+    padding:10px;
+}
+
+.gen_btn{
+    padding:5px;
+    background-color:#743ED9;
+    color:white;
+    font-family:arial;
+    font-size:13px;
+    border:2px solid black;
+}
+
+.gen_btn:hover{
+    background-color:#9a64ff;
+}
+
+	</style>
+
+<script language="javascript">
+
+	//  Generate CSV Download from the contents of the CSV textarea
+	$(document).ready(function(){
+    $('button').click(function(){
+        var data = $('#csv').val();
+        if(data == '')
+            return;
+        
+    // Create a bas64 encoded data uri
+    var fileName = "HTTP2_Protocol_Details";
+    var uri = 'data:text/csv;charset=utf-8,' + escape(document.getElementById("csv").value);
+   
+    // Create a hidden link to the data uri with the CSV data
+    var link = document.createElement("a");    
+    link.href = uri;
+    link.style = "visibility:hidden";
+    link.download = fileName + ".csv";
+    
+		// Inject the link into the DOM and then click it to trigger the file download
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    });
+});
+
+
+</script>
+</head>
+<body>
+
+<table border=1>
+	<tr>
+		<td width=300>Instructions:<p>
+			<ol>
+				<li>Open the Network Internals page 
+					  <br>chrome://net-internals/#http2
+				<li>Select an HTTP/2 stream
+				<li>Copy and Paste the full stream text
+				<li>Click on the Parse button					
+			<ol>
+		</td>
+		<td width=1000>
+			<form method="post" onSubmit="return parseH2DebugText();">
+				<textarea id="H2DebugText" class='txtarea'></textarea>
+				<p>
+				<input class='gen_btn' type="submit" value="Parse HTTP/2 Debug Info">
+			</form>
+		</td>
+	</tr>
+	<tr>	
+
+		<td>
+			<ul>
+				<li>JSON data</li>		
+			</ul>	
+		</td>
+		<td>
+<div class='mydiv'>    
+				  <textarea id="txt" class='txtarea'></textarea>   
+</div>	
+		</td>
+		
+	</tr>
+	<tr>	
+
+		<td>
+			<ul>
+				<li>CSV data</li>		
+			</ul>	
+		</td>
+		<td>
+<div class='mydiv'>    
+				  <textarea id="csv" class='txtarea'></textarea>
+				  <button class='gen_btn'>Generate File</button>
+</div>	
+		</td>
+		
+	</tr>
+		
+</table>
+
+
+<script language="javascript">
+	function parseH2DebugText() {
+		// Get the HTTP/2 debug data from the textarea field
+		var H2DebugText = document.getElementById("H2DebugText").value;
+		
+		// The lines array will contain the full HTTP/2 debug text
+		var lines = H2DebugText.split('\n');
+		
+		//  The h variable is a multidimensional associative array, which will hold all our HTTP/2 data/.
+		var h = [];
+		
+		//  Header row will be used to collect a list of all headers we've collected data for outputting later.
+		var headerrow={};
+		var eventCount = -1;
+		
+		// Parse each line of the HTTP/2 debug data
+		for(var i = 0; i < lines.length; i++) {		
+			
+				// If a line begins with "t=", then we are looking at a new event... 
+        if(lines[i].substring(0, 2) == "t=") {        		        	  
+        	  eventCount++;
+ 						
+ 						// Some text processing to make it easier to extract the information we need... 
+        		var strArray = lines[i].replace('[st=', '').replace('t=', '').replace(']', '').split(/(\s+)/);
+        		// Create a new object for the event and start collecting data from the first line... 
+        		h[eventCount]={};
+						h[eventCount]['eventnum']=eventCount;
+        		h[eventCount]['t']=strArray[0];
+        		h[eventCount]['st']=strArray[2];
+        		h[eventCount]['event']=strArray[4];
+        }
+        
+        // If a line contains -->, then there are some other variables we are interested in tracking
+        if(lines[i].indexOf("--> ")!= "-1") {        		
+        		// Some text processing to make it easier to extract the information we need...  
+        		var strArray = lines[i].split("--> ").pop().split(/(\s+)/);
+        		
+        		//  Save data to the associative array
+        		if (strArray[0].indexOf(":") == 0) {
+        			h[eventCount][strArray[0]]=strArray[2];
+        		} else {
+        			h[eventCount][strArray[0]]=strArray[4];
+        		}
+        		
+        		// Track any fields we added by adding them to the headerrow associated array
+        		headerrow[strArray[0]]="";	
+        }
+        
+        // If a line contains "    :" then there are some other variables we are interested in tracking
+				if(lines[i].indexOf("     :")!= "-1") {        		
+        		// Some text processing to make it easier to extract the information we need...  
+        		var strArray = lines[i].split(/(\s+)/);
+        		
+        		//  Save data to the associative array
+        		h[eventCount][strArray[2]]=strArray[4];        	
+        		
+        		// Track any fields we added by adding them to the headerrow associated array
+        		headerrow[strArray[2]]="";
+        }     
+    }
+   
+		// Create string representation of the JSON array and add it to the textarea for the JSON data
+		document.getElementById("txt").value = JSON.stringify(h);
+
+		// Build the header row... 
+		strHeaderRow = "eventnum,t,st,event";
+    for (var index in headerrow) {    
+            strHeaderRow += ',' + index;
+    }		
+    
+    // Start extracting information from each row.
+    rows="";
+    for (i=0;i<eventCount;i++){
+    	rows += h[i]['eventnum'] + "," 
+    				+ h[i]['t'] + "," 
+    				+ h[i]['st'] + "," 
+    				+ h[i]['event'];
+    				
+    	// In order to ensure that the data is outputted correctly, add fields based on the headerrow array
+	    for (var index in headerrow) {   
+	    				var val=h[i][index];
+	    				if (val == null) {   	// if the variable doesn't exist for this event, then just output a blank value
+	    				  val='';
+	    				}
+	            rows += ',' + val;
+	    }		
+	    rows += '\n';		
+    }
+		// Output CSV file
+		document.getElementById("csv").value = strHeaderRow + "\n" + rows;
+		
+		return false;
+	}
+	
+		
+</script>
+</body>
+</html>
