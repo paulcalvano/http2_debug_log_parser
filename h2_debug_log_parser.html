@@ -142,7 +142,7 @@
         	  eventCount++;
  						
  						// Some text processing to make it easier to extract the information we need... 
-        		var strArray = lines[i].replace('[st=', '').replace('t=', '').replace(']', '').split(/(\s+)/);
+        		var strArray = lines[i].replace('[st=', '').replace(/t=\s+|t=/, '').replace(']', '').split(/(\s+)/);
         		// Create a new object for the event and start collecting data from the first line... 
         		h[eventCount]={};
 						h[eventCount]['eventnum']=eventCount;
